@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TUVW 字母大冒險</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@600;800&family=Noto+Sans+TC:wght@500;700&display=swap');
+        
+        body {
+            font-family: 'Nunito', 'Noto Sans TC', sans-serif;
+            background-color: #f0fdfa;
+            user-select: none; /* 防止小朋友連按反白文字 */
+        }
+
+        .emoji-shadow {
+            text-shadow: 2px 4px 10px rgba(0,0,0,0.15);
+        }
+
+        .bounce-anim {
+            animation: bounce 0.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes bounce {
+            from { transform: translateY(0); }
+            to { transform: translateY(-10px); }
+        }
+
+        .shake-anim {
+            animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+
+        /* 慶祝動畫特效 */
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #fca5a5;
+            animation: fall 1.5s ease-out forwards;
+        }
+
+        @keyframes fall {
+            0% { transform: translateY(-50px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(360deg); opacity: 0; }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center overflow-auto">
+
+    <!-- 主畫面 -->
+    <div id="home-screen" class="w-full max-w-4xl p-6 text-center flex flex-col items-center justify-center min-h-screen">
+        <h1 class="text-5xl md:text-6xl font-extrabold text-teal-600 mb-4 drop-shadow-sm">
+            TUVW 字母大冒險 🌟
+        </h1>
+        <p class="text-xl md:text-2xl text-gray-600 mb-10 font-bold">
+            點擊下方按鈕開始遊玩吧！
+        </p>
+        
+        <div class="flex flex-col md:flex-row gap-6 w-full max-w-lg justify-center">
+            <button onclick="startMode('learn')" class="flex-1 bg-yellow-400 hover:bg-yellow-300 text-yellow-900 border-4 border-yellow-500 rounded-3xl py-6 px-4 text-3xl font-bold shadow-lg transform transition hover:scale-105 active:scale-95">
+                📖 學習單字
+            </button>
+            <button onclick="startMode('game')" class="flex-1 bg-pink-400 hover:bg-pink-300 text-white border-4 border-pink-500 rounded-3xl py-6 px-4 text-3xl font-bold shadow-lg transform transition hover:scale-105 active:scale-95">
+                🎮 找找看遊戲
+            </button>
+        </div>
+        
+        <div class="mt-12 text-6xl flex gap-4 bounce-anim">
+            🐢 🦄 🚐 💧
+        </div>
+    </div>
+
+    <!-- 學習模式畫面 -->
+    <div id="learn-screen" class="hidden w-full max-w-5xl p-4 flex flex-col items-center min-h-screen py-10">
+        <div class="flex justify-between items-center w-full mb-8 px-4">
+            <button onclick="goHome()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-full w-16 h-16 flex items-center justify-center text-2xl font-bold shadow-md transition transform hover:scale-110 shrink-0">
+                ⬅️
+            </button>
+            <h2 class="text-4xl md:text-5xl font-bold text-teal-600 text-center flex-1">學習單字 📖</h2>
+            <div class="w-16 shrink-0"></div> <!-- 佔位符 -->
+        </div>
+        
+        <p class="mb-8 text-xl text-gray-500 font-bold">點擊卡片聽聽看英文怎麼唸喔！🔊</p>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 w-full px-4" id="flashcards-container">
+            <!-- 卡片由 JS 動態生成 -->
+        </div>
+    </div>
+
+    <!-- 遊戲模式畫面 -->
+    <div id="game-screen" class="hidden w-full max-w-5xl p-4 flex flex-col items-center min-h-screen justify-center py-10">
+        <div class="flex justify-between items-center w-full mb-4 px-4">
+            <button onclick="goHome()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-full w-16 h-16 flex items-center justify-center text-2xl font-bold shadow-md transition transform hover:scale-110">
+                ⬅️
+            </button>
+            <div class="bg-yellow-100 border-4 border-yellow-400 rounded-2xl px-6 py-2">
+                <span class="text-2xl font-bold text-yellow-700">得分: <span id="score-display">0</span> ⭐</span>
+            </div>
+        </div>
+
+        <div class="bg-white border-4 border-teal-500 rounded-3xl p-8 w-full max-w-2xl text-center shadow-xl mb-8 relative">
+            <button onclick="playCurrentQuestionAudio()" class="absolute top-4 right-4 bg-teal-100 text-teal-700 p-3 rounded-full hover:bg-teal-200 transition">
+                🔊
+            </button>
+            <h2 class="text-3xl md:text-4xl font-bold text-gray-600 mb-2">請找出...</h2>
+            <div id="question-word" class="text-6xl md:text-8xl font-extrabold text-teal-600 capitalize tracking-wider my-4">
+                Word
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 md:gap-6 w-full max-w-2xl px-4" id="game-buttons-container">
+            <!-- 選項按鈕由 JS 動態生成 (每次 4 個) -->
+        </div>
+    </div>
+
+    <!-- 成功過關提示 (Overlay) -->
+    <div id="success-overlay" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+        <div class="bg-white rounded-3xl p-10 transform scale-110 shadow-2xl flex flex-col items-center">
+            <div class="text-8xl mb-4 bounce-anim">🎉</div>
+            <h2 class="text-5xl font-bold text-pink-500">太棒了！</h2>
+        </div>
+    </div>
+
+    <script>
+        // 擴充後的單字資料庫 (共12個單字)
+        const vocabData = [
+            // T 開頭單字
+            { letter: 'T', word: 'turtle', zh: '烏龜', emoji: '🐢', color: 'bg-green-100', border: 'border-green-400', textColor: 'text-green-700' },
+            { letter: 'T', word: 'tiger', zh: '老虎', emoji: '🐯', color: 'bg-yellow-100', border: 'border-yellow-400', textColor: 'text-yellow-700' },
+            { letter: 'T', word: 'tomato', zh: '番茄', emoji: '🍅', color: 'bg-red-100', border: 'border-red-400', textColor: 'text-red-700' },
+            
+            // U 開頭單字
+            { letter: 'U', word: 'umbrella', zh: '雨傘', emoji: '☂️', color: 'bg-blue-100', border: 'border-blue-400', textColor: 'text-blue-700' },
+            { letter: 'U', word: 'unicorn', zh: '獨角獸', emoji: '🦄', color: 'bg-purple-100', border: 'border-purple-400', textColor: 'text-purple-700' },
+            { letter: 'U', word: 'uncle', zh: '叔叔', emoji: '👨', color: 'bg-indigo-100', border: 'border-indigo-400', textColor: 'text-indigo-700' },
+
+            // V 開頭單字
+            { letter: 'V', word: 'vest', zh: '背心', emoji: '🦺', color: 'bg-orange-100', border: 'border-orange-400', textColor: 'text-orange-700' },
+            { letter: 'V', word: 'van', zh: '廂型車', emoji: '🚐', color: 'bg-teal-100', border: 'border-teal-400', textColor: 'text-teal-700' },
+            { letter: 'V', word: 'violin', zh: '小提琴', emoji: '🎻', color: 'bg-amber-100', border: 'border-amber-400', textColor: 'text-amber-700' },
+
+            // W 開頭單字
+            { letter: 'W', word: 'water', zh: '水', emoji: '💧', color: 'bg-cyan-100', border: 'border-cyan-400', textColor: 'text-cyan-700' },
+            { letter: 'W', word: 'wolf', zh: '狼', emoji: '🐺', color: 'bg-stone-100', border: 'border-stone-400', textColor: 'text-stone-700' },
+            { letter: 'W', word: 'watch', zh: '手錶', emoji: '⌚', color: 'bg-gray-100', border: 'border-gray-400', textColor: 'text-gray-700' }
+        ];
+
+        let currentQuestion = null;
+        let score = 0;
+
+        // 語音播放功能
+        function speakWord(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US'; 
+                utterance.rate = 0.8; 
+                utterance.pitch = 1.2; 
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        // 畫面切換
+        function switchScreen(screenId) {
+            document.getElementById('home-screen').classList.add('hidden');
+            document.getElementById('learn-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.add('hidden');
+            document.getElementById(screenId).classList.remove('hidden');
+            
+            // 如果回到主畫面或學習模式，確保網頁滑動回頂部
+            window.scrollTo(0, 0);
+        }
+
+        function goHome() {
+            switchScreen('home-screen');
+        }
+
+        function startMode(mode) {
+            if (mode === 'learn') {
+                setupLearnMode();
+                switchScreen('learn-screen');
+            } else if (mode === 'game') {
+                score = 0;
+                document.getElementById('score-display').innerText = score;
+                switchScreen('game-screen');
+                nextQuestion();
+            }
+        }
+
+        // --- 學習模式邏輯 ---
+        function setupLearnMode() {
+            const container = document.getElementById('flashcards-container');
+            container.innerHTML = ''; // 清空
+
+            vocabData.forEach(item => {
+                const card = document.createElement('div');
+                card.className = `${item.color} border-4 ${item.border} rounded-3xl p-4 flex flex-col items-center justify-center cursor-pointer transform transition hover:scale-105 active:scale-95 shadow-md h-56 md:h-64`;
+                card.onclick = () => speakWord(item.word);
+
+                card.innerHTML = `
+                    <div class="text-6xl md:text-7xl emoji-shadow mb-3">${item.emoji}</div>
+                    <div class="text-4xl md:text-5xl font-extrabold ${item.textColor} mb-1">${item.letter}</div>
+                    <div class="text-xl md:text-2xl font-bold ${item.textColor} capitalize">${item.word}</div>
+                    <div class="text-lg md:text-xl font-bold text-gray-500 mt-1">${item.zh}</div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // --- 遊戲模式邏輯 ---
+        function nextQuestion() {
+            // 隨機選擇一個題目
+            currentQuestion = vocabData[Math.floor(Math.random() * vocabData.length)];
+            
+            // 更新畫面題目
+            document.getElementById('question-word').innerText = currentQuestion.word;
+            
+            // 建立選項按鈕
+            const container = document.getElementById('game-buttons-container');
+            container.innerHTML = '';
+            
+            // 從資料庫中過濾掉當前答案，隨機選出 3 個錯誤選項
+            const wrongOptions = vocabData.filter(item => item.word !== currentQuestion.word);
+            const shuffledWrongOptions = wrongOptions.sort(() => Math.random() - 0.5).slice(0, 3);
+            
+            // 將正確答案與 3 個錯誤選項合併，並再次打亂顯示順序
+            const optionsToShow = [currentQuestion, ...shuffledWrongOptions].sort(() => Math.random() - 0.5);
+
+            optionsToShow.forEach(item => {
+                const btn = document.createElement('button');
+                // 為了讓 4 個選項更清晰，調整了按鈕的容器比例 (使用 grid-cols-2)
+                btn.className = `bg-white border-4 border-gray-300 hover:border-teal-400 rounded-3xl p-4 md:p-8 flex items-center justify-center text-6xl md:text-8xl emoji-shadow cursor-pointer transform transition hover:scale-105 shadow-sm h-40 md:h-56`;
+                btn.onclick = () => checkAnswer(item, btn);
+                btn.innerHTML = item.emoji;
+                container.appendChild(btn);
+            });
+
+            // 稍微延遲後自動朗讀題目
+            setTimeout(() => {
+                playCurrentQuestionAudio();
+            }, 500);
+        }
+
+        function playCurrentQuestionAudio() {
+            if (currentQuestion) {
+                speakWord(currentQuestion.word);
+            }
+        }
+
+        function checkAnswer(selectedItem, buttonElement) {
+            if (selectedItem.word === currentQuestion.word) {
+                // 答對了！
+                score += 1;
+                document.getElementById('score-display').innerText = score;
+                speakWord('Good job!');
+                
+                // 顯示特效與覆蓋層
+                buttonElement.classList.add('bg-green-200', 'border-green-500', 'scale-110');
+                createConfetti();
+                
+                const overlay = document.getElementById('success-overlay');
+                overlay.classList.remove('hidden');
+                
+                setTimeout(() => {
+                    overlay.classList.add('hidden');
+                    nextQuestion();
+                }, 1500);
+
+            } else {
+                // 答錯了！
+                buttonElement.classList.remove('hover:scale-105');
+                buttonElement.classList.add('shake-anim', 'bg-red-100', 'border-red-400');
+                speakWord('Try again');
+                
+                setTimeout(() => {
+                    buttonElement.classList.remove('shake-anim', 'bg-red-100', 'border-red-400');
+                    buttonElement.classList.add('hover:scale-105');
+                }, 400);
+            }
+        }
+
+        // 簡單的彩紙慶祝特效
+        function createConfetti() {
+            const colors = ['#fca5a5', '#fcd34d', '#86efac', '#93c5fd', '#c4b5fd'];
+            for (let i = 0; i < 30; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = Math.random() * 100 + 'vw';
+                confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                confetti.style.animationDuration = (Math.random() * 1 + 1) + 's';
+                document.body.appendChild(confetti);
+                
+                setTimeout(() => {
+                    confetti.remove();
+                }, 2000);
+            }
+        }
+    </script>
+</body>
+</html>

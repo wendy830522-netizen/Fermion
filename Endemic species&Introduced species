@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>台灣生物分類挑戰賽</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f1f5f9;
+        }
+
+        .drop-zone {
+            transition: all 0.3s ease;
+        }
+
+        .drop-zone.drag-over {
+            transform: scale(1.02);
+            border-color: #fbbf24;
+            background-color: #fffbeb;
+        }
+
+        .organism-card {
+            cursor: grab;
+            transition: all 0.2s ease;
+        }
+
+        .organism-card:active {
+            cursor: grabbing;
+        }
+
+        .organism-card.selected {
+            border-color: #fbbf24;
+            background-color: #fffbeb;
+            transform: scale(1.05);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        .feedback-pop {
+            animation: pop 0.4s ease-out;
+        }
+
+        @keyframes pop {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .hidden-item {
+            display: none;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+    <div class="max-w-5xl mx-auto">
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-6 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+            <div class="flex items-center gap-6">
+                <!-- 遊戲 Logo -->
+                <img src="image_0.png" alt="台灣生物分類挑戰賽 Logo" class="w-20 h-20 md:w-24 md:h-24">
+                <div>
+                    <h1 class="text-3xl font-bold text-slate-800">
+                        台灣生物分類挑戰賽
+                    </h1>
+                    <p id="round-indicator" class="text-blue-600 font-bold text-lg">第 1 / 2 回合</p>
+                    <p class="text-slate-600">請將下方的生物拖曳到正確的分類框中</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="bg-white px-6 py-2 rounded-full shadow-sm border border-slate-200 font-bold text-blue-600 text-xl">
+                    得分：<span id="score">0</span>
+                </div>
+                <button onclick="resetGame()" class="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-full shadow-sm border border-slate-200 transition-all">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i> 重新開始
+                </button>
+            </div>
+        </div>
+
+        <!-- Categories -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
+            <!-- Endemic Box -->
+            <div id="endemic-zone" class="drop-zone min-h-[250px] rounded-3xl border-2 border-dashed border-blue-400 bg-blue-50 p-6 flex flex-col relative" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'endemic')" onclick="handleZoneClick('endemic')">
+                <div class="flex items-center justify-center gap-3 mb-6 font-bold text-2xl text-blue-700">
+                    <i data-lucide="map-pin" class="w-8 h-8"></i> 特有種
+                </div>
+                <div id="endemic-list" class="flex flex-wrap gap-3 content-start flex-grow"></div>
+                <div class="empty-hint absolute inset-0 flex items-center justify-center text-slate-400 pointer-events-none opacity-50">
+                    拖入特有生物卡片
+                </div>
+            </div>
+
+            <!-- Invasive Box -->
+            <div id="invasive-zone" class="drop-zone min-h-[250px] rounded-3xl border-2 border-dashed border-red-400 bg-red-50 p-6 flex flex-col relative" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'invasive')" onclick="handleZoneClick('invasive')">
+                <div class="flex items-center justify-center gap-3 mb-6 font-bold text-2xl text-red-700">
+                    <i data-lucide="alert-triangle" class="w-8 h-8"></i> 外來種
+                </div>
+                <div id="invasive-list" class="flex flex-wrap gap-3 content-start flex-grow"></div>
+                <div class="empty-hint absolute inset-0 flex items-center justify-center text-slate-400 pointer-events-none opacity-50">
+                    拖入外來生物卡片
+                </div>
+            </div>
+        </div>
+
+        <!-- Feedback UI -->
+        <div class="h-16 flex justify-center mb-6">
+            <div id="feedback-msg" class="hidden flex items-center gap-3 px-8 py-3 rounded-full shadow-lg border feedback-pop">
+                <span id="feedback-icon"></span>
+                <span id="feedback-text" class="font-bold text-lg text-white"></span>
+            </div>
+        </div>
+
+        <!-- Organisms Deck -->
+        <div class="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
+            <h2 class="text-xl font-semibold text-slate-700 mb-6">待分類生物</h2>
+            <div id="organisms-deck" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                <!-- Cards will be injected here -->
+            </div>
+
+            <!-- Round Complete -->
+            <div id="round-complete" class="hidden py-12 text-center flex flex-col items-center gap-4">
+                <div class="bg-yellow-100 p-8 rounded-full mb-4">
+                    <i data-lucide="trophy" class="w-20 h-20 text-yellow-600"></i>
+                </div>
+                <h3 id="complete-title" class="text-4xl font-bold text-slate-800">第一回合完成！</h3>
+                <p id="complete-desc" class="text-xl text-slate-600">準備好挑戰下一批生物了嗎？</p>
+                <button id="next-btn" onclick="startSecondRound()" class="mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-10 rounded-full shadow-lg transition-transform hover:scale-105">
+                    進入第二回合
+                </button>
+            </div>
+        </div>
+
+        <!-- Footer Info -->
+        <div class="mt-12 flex flex-col md:flex-row gap-6 text-sm text-slate-500">
+            <div class="flex-1 bg-white p-4 rounded-xl border border-slate-100">
+                <strong class="text-blue-600 block mb-1">特有種 (Endemic Species)：</strong> 
+                僅在台灣自然分布的「獨立物種」。本次挑戰已遵循嚴謹的生物學分類，嚴格排除了非特有種與「特有亞種」(如台灣黑熊)。
+            </div>
+            <div class="flex-1 bg-white p-4 rounded-xl border border-slate-100">
+                <strong class="text-red-600 block mb-1">外來種 (Invasive Species)：</strong> 
+                人為引進非原生於台灣的生物，可能危害本土生態平衡。
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 小花蔓澤蘭 SVG
+        const MikaniaIcon = `
+            <svg viewBox="0 0 100 100" class="w-12 h-12 inline-block">
+                <!-- 纏繞的藤蔓 -->
+                <path d="M 35,100 Q 65,75 50,50 T 65,0" fill="none" stroke="#16a34a" stroke-width="3" />
+                <path d="M 55,100 Q 25,75 50,50 T 45,0" fill="none" stroke="#22c55e" stroke-width="1.5" />
+                <!-- 葉片：對生的心形/三角狀葉片 -->
+                <g fill="#4ade80" stroke="#16a34a" stroke-width="2">
+                    <path d="M0,-5 C-10,-15 -25,-5 -15,10 L0,30 L15,10 C25,-5 10,-15 0,-5 Z" transform="translate(45, 85) rotate(60) scale(0.65)"/>
+                    <path d="M0,-5 C-10,-15 -25,-5 -15,10 L0,30 L15,10 C25,-5 10,-15 0,-5 Z" transform="translate(55, 80) rotate(-75) scale(0.65)"/>
+                    <path d="M0,-5 C-10,-15 -25,-5 -15,10 L0,30 L15,10 C25,-5 10,-15 0,-5 Z" transform="translate(45, 50) rotate(110) scale(0.6)"/>
+                    <path d="M0,-5 C-10,-15 -25,-5 -15,10 L0,30 L15,10 C25,-5 10,-15 0,-5 Z" transform="translate(55, 45) rotate(-100) scale(0.6)"/>
+                    <path d="M0,-5 C-10,-15 -25,-5 -15,10 L0,30 L15,10 C25,-5 10,-15 0,-5 Z" transform="translate(60, 20) rotate(50) scale(0.5)"/>
+                    <path d="M0,-5 C-10,-15 -25,-5 -15,10 L0,30 L15,10 C25,-5 10,-15 0,-5 Z" transform="translate(50, 15) rotate(-60) scale(0.5)"/>
+                </g>
+                <!-- 白色叢生小花 (花簇) -->
+                <g fill="#ffffff" stroke="#cbd5e1" stroke-width="0.5">
+                    <circle cx="28" cy="45" r="4.5" /><circle cx="34" cy="42" r="5" /><circle cx="25" cy="39" r="4" /><circle cx="31" cy="36" r="5.5" /><circle cx="37" cy="47" r="4.5" /><circle cx="36" cy="37" r="4.5" /><circle cx="28" cy="51" r="3.5" />
+                </g>
+                <g fill="#bef264">
+                    <circle cx="28" cy="45" r="1.5" /><circle cx="34" cy="42" r="1.5" /><circle cx="31" cy="36" r="1.5" /><circle cx="36" cy="37" r="1.5" />
+                </g>
+                <g fill="#ffffff" stroke="#cbd5e1" stroke-width="0.5">
+                    <circle cx="70" cy="22" r="4.5" /><circle cx="76" cy="18" r="5.5" /><circle cx="80" cy="24" r="4" /><circle cx="73" cy="28" r="4.5" /><circle cx="66" cy="17" r="4" /><circle cx="80" cy="15" r="4.5" /><circle cx="70" cy="13" r="3.5" />
+                </g>
+                <g fill="#bef264">
+                    <circle cx="70" cy="22" r="1.5" /><circle cx="76" cy="18" r="1.5" /><circle cx="73" cy="28" r="1.5" /><circle cx="80" cy="15" r="1.5" />
+                </g>
+                <g fill="#ffffff" stroke="#cbd5e1" stroke-width="0.5">
+                    <circle cx="48" cy="85" r="4.5" /><circle cx="54" cy="88" r="5" /><circle cx="60" cy="84" r="4.5" /><circle cx="56" cy="79" r="5.5" /><circle cx="49" cy="79" r="4" /><circle cx="42" cy="83" r="3.5" />
+                </g>
+                <g fill="#bef264">
+                    <circle cx="48" cy="85" r="1.5" /><circle cx="54" cy="88" r="1.5" /><circle cx="56" cy="79" r="1.5" /><circle cx="49" cy="79" r="1.5" />
+                </g>
+            </svg>
+        `;
+
+        // 埃及聖䴉 SVG
+        const SacredIbisIcon = `
+            <svg viewBox="0 0 100 100" class="w-12 h-12 inline-block">
+                <ellipse cx="55" cy="55" rx="20" ry="14" fill="#ffffff" stroke="#334155" stroke-width="2"/>
+                <path d="M70,50 Q85,55 75,70 Q65,65 70,50" fill="#1e293b" />
+                <path d="M40,50 Q30,30 35,20" fill="none" stroke="#1e293b" stroke-width="6" stroke-linecap="round"/>
+                <circle cx="35" cy="20" r="5" fill="#1e293b" />
+                <path d="M30,20 Q15,25 10,40" fill="none" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/>
+                <line x1="50" y1="68" x2="45" y2="88" stroke="#1e293b" stroke-width="2" stroke-linecap="round"/>
+                <line x1="60" y1="68" x2="55" y2="88" stroke="#1e293b" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+        `;
+
+        // 玉山薄雪草 SVG
+        const EdelweissIcon = `
+            <svg viewBox="0 0 100 100" class="w-12 h-12 inline-block">
+                <path d="M50,50 Q45,75 50,100" fill="none" stroke="#65a30d" stroke-width="4" />
+                <path d="M50,70 Q30,65 35,50 Q40,60 50,70" fill="#84cc16" />
+                <path d="M50,85 Q70,80 65,65 Q60,75 50,85" fill="#84cc16" />
+                <ellipse cx="50" cy="50" rx="30" ry="8" fill="#e2e8f0" transform="rotate(0 50 50)"/>
+                <ellipse cx="50" cy="50" rx="28" ry="8" fill="#e2e8f0" transform="rotate(45 50 50)"/>
+                <ellipse cx="50" cy="50" rx="30" ry="8" fill="#e2e8f0" transform="rotate(90 50 50)"/>
+                <ellipse cx="50" cy="50" rx="28" ry="8" fill="#e2e8f0" transform="rotate(135 50 50)"/>
+                <ellipse cx="50" cy="50" rx="20" ry="6" fill="#ffffff" transform="rotate(22.5 50 50)"/>
+                <ellipse cx="50" cy="50" rx="20" ry="6" fill="#ffffff" transform="rotate(67.5 50 50)"/>
+                <ellipse cx="50" cy="50" rx="20" ry="6" fill="#ffffff" transform="rotate(112.5 50 50)"/>
+                <ellipse cx="50" cy="50" rx="20" ry="6" fill="#ffffff" transform="rotate(157.5 50 50)"/>
+                <circle cx="50" cy="50" r="6" fill="#ca8a04"/>
+                <circle cx="43" cy="45" r="3" fill="#facc15"/><circle cx="57" cy="45" r="3" fill="#facc15"/><circle cx="43" cy="55" r="3" fill="#facc15"/><circle cx="57" cy="55" r="3" fill="#facc15"/><circle cx="50" cy="41" r="3" fill="#facc15"/><circle cx="50" cy="59" r="3" fill="#facc15"/><circle cx="40" cy="50" r="3" fill="#facc15"/><circle cx="60" cy="50" r="3" fill="#facc15"/>
+            </svg>
+        `;
+
+        // 布袋蓮 SVG
+        const WaterHyacinthIcon = `
+            <svg viewBox="0 0 100 100" class="w-12 h-12 inline-block">
+                <path d="M10,90 Q25,95 40,90 T70,90 T90,95" fill="none" stroke="#3b82f6" stroke-width="3" stroke-linecap="round"/>
+                <g stroke="#166534" stroke-width="1.5">
+                    <ellipse cx="28" cy="75" rx="10" ry="16" fill="#4ade80" />
+                    <ellipse cx="72" cy="75" rx="10" ry="16" fill="#4ade80" />
+                    <ellipse cx="50" cy="80" rx="12" ry="18" fill="#4ade80" />
+                </g>
+                <circle cx="22" cy="55" r="14" fill="#22c55e" stroke="#166534" stroke-width="1.5"/>
+                <circle cx="78" cy="55" r="14" fill="#22c55e" stroke="#166534" stroke-width="1.5"/>
+                <g transform="translate(50, 42)">
+                    <ellipse cx="0" cy="12" rx="7" ry="15" fill="#d8b4e2" transform="rotate(0)" />
+                    <ellipse cx="-12" cy="6" rx="7" ry="15" fill="#d8b4e2" transform="rotate(60)" />
+                    <ellipse cx="12" cy="6" rx="7" ry="15" fill="#d8b4e2" transform="rotate(-60)" />
+                    <ellipse cx="-10" cy="-6" rx="7" ry="14" fill="#d8b4e2" transform="rotate(-45)" />
+                    <ellipse cx="10" cy="-6" rx="7" ry="14" fill="#d8b4e2" transform="rotate(45)" />
+                    <ellipse cx="0" cy="-12" rx="9" ry="15" fill="#c084fc" />
+                    <ellipse cx="0" cy="-10" rx="5" ry="8" fill="#4338ca" />
+                    <circle cx="0" cy="-8" r="2.5" fill="#facc15" />
+                </g>
+            </svg>
+        `;
+
+        // 臺灣百合 SVG
+        const TaiwanLilyIcon = `
+            <svg viewBox="0 0 100 100" class="w-12 h-12 inline-block">
+                <path d="M20,80 Q25,90 25,100" fill="none" stroke="#16a34a" stroke-width="4"/>
+                <path d="M22,90 Q10,85 5,75 Q15,80 22,90" fill="#22c55e" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+                <path d="M24,95 Q40,90 45,80 Q35,85 24,95" fill="#22c55e" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+                <polygon points="17,83 27,73 23,68 14,78" fill="#16a34a" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+                <path d="M22,75 Q20,35 45,10 Q55,20 35,45 Z" fill="#ffffff" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+                <path d="M22,75 Q50,30 80,15 Q75,30 45,45 Z" fill="#ffffff" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+                <path d="M22,75 Q60,55 90,50 Q80,65 45,65 Z" fill="#ffffff" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+                <path d="M35,60 Q55,45 75,25" fill="none" stroke="#ca8a04" stroke-width="1.5"/>
+                <circle cx="75" cy="25" r="2.5" fill="#b45309"/>
+                <path d="M35,60 Q65,45 83,35" fill="none" stroke="#ca8a04" stroke-width="1.5"/>
+                <circle cx="83" cy="35" r="2.5" fill="#b45309"/>
+                <path d="M35,60 Q65,55 80,50" fill="none" stroke="#ca8a04" stroke-width="1.5"/>
+                <circle cx="80" cy="50" r="2.5" fill="#b45309"/>
+                <path d="M22,75 Q35,50 60,30 Q50,55 30,65 Z" fill="#ffffff" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+                <path d="M22,75 Q45,60 70,45 Q50,65 30,70 Z" fill="#ffffff" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+        `;
+
+        // 臺灣野山羊 SVG
+        const TaiwanSerowIcon = `
+            <svg viewBox="0 0 100 100" class="w-12 h-12 inline-block">
+                <path d="M25,100 Q40,60 70,100 Z" fill="#78350f"/>
+                <path d="M30,70 Q45,95 60,70 Z" fill="#facc15"/>
+                <path d="M58,35 Q65,15 75,20" fill="none" stroke="#0f172a" stroke-width="4" stroke-linecap="round"/>
+                <ellipse cx="70" cy="40" rx="12" ry="5" fill="#451a03" transform="rotate(-20 70 40)"/>
+                <path d="M30,65 Q25,50 45,35 Q65,25 70,45 Q75,70 45,75 Q35,75 30,65 Z" fill="#78350f"/>
+                <path d="M28,60 Q35,55 40,65 Q35,75 28,70 Q25,65 28,60 Z" fill="#451a03"/>
+                <circle cx="28" cy="64" r="2" fill="#000000"/>
+                <circle cx="48" cy="48" r="4.5" fill="#000000"/>
+                <circle cx="46.5" cy="46.5" r="1.5" fill="#ffffff"/>
+                <path d="M50,52 Q55,55 58,52" fill="none" stroke="#451a03" stroke-width="2"/>
+                <path d="M52,32 Q55,10 68,12" fill="none" stroke="#0f172a" stroke-width="5" stroke-linecap="round"/>
+                <ellipse cx="65" cy="45" rx="14" ry="6" fill="#78350f" transform="rotate(25 65 45)"/>
+                <ellipse cx="65" cy="45" rx="9" ry="3" fill="#facc15" transform="rotate(25 65 45)"/>
+            </svg>
+        `;
+
+        // 台灣獼猴 SVG
+        const FormosanMacaqueIcon = `
+            <svg viewBox="0 0 100 100" class="w-12 h-12 inline-block">
+                <path d="M 15,100 C 15,60 85,60 85,100 Z" fill="#57534e" />
+                <ellipse cx="20" cy="50" rx="9" ry="12" fill="#e7a59a" transform="rotate(-15 20 50)" />
+                <ellipse cx="80" cy="50" rx="9" ry="12" fill="#e7a59a" transform="rotate(15 80 50)" />
+                <ellipse cx="20" cy="50" rx="5" ry="8" fill="#cb8579" transform="rotate(-15 20 50)" />
+                <ellipse cx="80" cy="50" rx="5" ry="8" fill="#cb8579" transform="rotate(15 80 50)" />
+                <ellipse cx="50" cy="45" rx="28" ry="30" fill="#57534e" />
+                <path d="M 35,25 C 40,15 50,12 65,25 Z" fill="#44403c"/>
+                <path d="M 50,35 C 30,25 22,50 35,62 C 35,75 45,80 50,80 C 55,80 65,75 65,62 C 78,50 70,25 50,35 Z" fill="#e7a59a" />
+                <ellipse cx="40" cy="44" rx="8" ry="7" fill="#cb8579" />
+                <ellipse cx="60" cy="44" rx="8" ry="7" fill="#cb8579" />
+                <circle cx="40" cy="44" r="4" fill="#292524" />
+                <circle cx="60" cy="44" r="4" fill="#292524" />
+                <circle cx="38.5" cy="42.5" r="1.5" fill="#ffffff" />
+                <circle cx="58.5" cy="42.5" r="1.5" fill="#ffffff" />
+                <path d="M 32,39 Q 40,35 46,40" fill="none" stroke="#44403c" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M 68,39 Q 60,35 54,40" fill="none" stroke="#44403c" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M 46,55 L 54,55 L 50,62 Z" fill="#a8695e" />
+                <circle cx="47" cy="59" r="1.5" fill="#44403c" />
+                <circle cx="53" cy="59" r="1.5" fill="#44403c" />
+                <path d="M 40,70 Q 50,74 60,70" fill="none" stroke="#a8695e" stroke-width="2" stroke-linecap="round"/>
+                <path d="M 22,50 Q 15,70 25,85 Q 32,70 28,55 Z" fill="#a8a29e" />
+                <path d="M 78,50 Q 85,70 75,85 Q 68,70 72,55 Z" fill="#a8a29e" />
+            </svg>
+        `;
+
+        // 台灣藍鵲 SVG
+        const TaiwanBlueMagpieIcon = `
+            <svg viewBox="0 0 100 100" class="w-12 h-12 inline-block">
+                <path d="M 55,60 C 70,80 85,95 95,95 C 85,80 75,65 65,50 Z" fill="#1e40af" stroke="#1e3a8a" stroke-width="1"/>
+                <path d="M 60,55 C 75,75 80,90 90,90 C 80,80 70,60 60,55 Z" fill="#3b82f6" />
+                <circle cx="92" cy="92" r="2.5" fill="#ffffff"/>
+                <circle cx="83" cy="83" r="2.5" fill="#ffffff"/>
+                <path d="M 10,80 Q 50,85 90,70" fill="none" stroke="#78350f" stroke-width="4" stroke-linecap="round"/>
+                <path d="M 40,68 L 38,80 M 50,65 L 50,78" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round"/>
+                <ellipse cx="45" cy="55" rx="18" ry="14" fill="#3b82f6" transform="rotate(-30 45 55)" stroke="#1e3a8a" stroke-width="1"/>
+                <path d="M 35,50 C 50,45 60,55 60,65 C 50,65 40,60 35,50 Z" fill="#1d4ed8" stroke="#1e3a8a" stroke-width="1"/>
+                <circle cx="32" cy="35" r="11" fill="#1e293b" />
+                <path d="M 25,42 C 35,55 45,50 42,35 Z" fill="#1e293b" />
+                <path d="M 22,32 L 6,36 L 22,40 Z" fill="#ef4444" stroke="#b91c1c" stroke-width="1" stroke-linejoin="round"/>
+                <circle cx="26" cy="33" r="3.5" fill="#facc15" />
+                <circle cx="25" cy="33" r="1.5" fill="#000000" />
+            </svg>
+        `;
+
+        // 橙腹樹蛙 SVG
+        const OrangeBelliedFrogIcon = `
+            <svg viewBox="0 0 100 100" class="w-12 h-12 inline-block">
+                <path d="M 25,65 L 15,75 L 25,75" fill="none" stroke="#14532d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M 65,60 L 60,75 L 68,75" fill="none" stroke="#14532d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M 15,70 C 15,35 45,30 65,35 C 80,40 90,50 85,62 C 70,75 35,78 15,70 Z" fill="#ea580c" stroke="#c2410c" stroke-width="1"/>
+                <path d="M 15,70 C 15,35 45,30 65,35 C 80,40 90,50 85,62 C 65,62 35,60 15,70 Z" fill="#22c55e" stroke="#166534" stroke-width="1"/>
+                <g fill="#000000">
+                    <circle cx="25" cy="66" r="1.5"/><circle cx="32" cy="65" r="2"/><circle cx="40" cy="64" r="1.5"/><circle cx="48" cy="63" r="2"/><circle cx="56" cy="62" r="1.5"/><circle cx="64" cy="61" r="1"/><circle cx="72" cy="60" r="1.5"/><circle cx="36" cy="61" r="1"/><circle cx="44" cy="61" r="1"/><circle cx="52" cy="60" r="1"/>
+                </g>
+                <ellipse cx="28" cy="55" rx="14" ry="10" fill="#22c55e" transform="rotate(-30 28 55)" stroke="#166534" stroke-width="1"/>
+                <path d="M 17,62 C 25,68 35,62 38,55" fill="none" stroke="#ea580c" stroke-width="2"/>
+                <circle cx="22" cy="62" r="1" fill="#000000"/><circle cx="28" cy="64" r="1" fill="#000000"/><circle cx="34" cy="62" r="1" fill="#000000"/>
+                <path d="M 17,62 L 15,80 L 28,80" fill="none" stroke="#22c55e" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="28" cy="80" r="2.5" fill="#ea580c"/><circle cx="23" cy="82" r="2.5" fill="#ea580c"/>
+                <path d="M 60,55 L 53,78 L 65,80" fill="none" stroke="#22c55e" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="65" cy="80" r="2" fill="#ea580c"/><circle cx="59" cy="82" r="2" fill="#ea580c"/>
+                <circle cx="68" cy="40" r="5" fill="#facc15" stroke="#166534" stroke-width="1"/>
+                <ellipse cx="69" cy="40" rx="2.5" ry="1.5" fill="#000000"/> 
+                <path d="M 62,38 C 66,34 72,34 75,39" fill="none" stroke="#166534" stroke-width="1.5"/>
+                <path d="M 85,58 C 80,60 72,59 68,57" fill="none" stroke="#166534" stroke-width="1"/>
+            </svg>
+        `;
+
+        // 馬櫻丹 SVG
+        const LantanaIcon = `
+            <svg viewBox="0 0 100 100" class="w-12 h-12 inline-block">
+                <g fill="#15803d" stroke="#14532d" stroke-width="1.5" stroke-linejoin="round">
+                    <path d="M50,50 C20,40 5,60 15,85 C35,75 45,65 50,50 Z" />
+                    <path d="M50,50 C80,40 95,60 85,85 C65,75 55,65 50,50 Z" />
+                    <path d="M50,50 C25,20 10,5 30,10 C45,15 45,35 50,50 Z" />
+                    <path d="M50,50 C75,20 90,5 70,10 C55,15 55,35 50,50 Z" />
+                </g>
+                <g stroke="#14532d" stroke-width="1.5" fill="none">
+                    <path d="M50,50 C35,60 25,75 15,85" /><path d="M50,50 C65,60 75,75 85,85" />
+                    <path d="M50,50 C45,35 40,20 30,10" /><path d="M50,50 C55,35 60,20 70,10" />
+                </g>
+                <g fill="#ef4444">
+                    <path transform="translate(20,36)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(28,24)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(44,20)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(56,20)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(72,24)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(80,36)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(26,56)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(74,56)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/>
+                </g>
+                <g fill="#991b1b">
+                    <circle cx="20" cy="36" r="1.5"/><circle cx="28" cy="24" r="1.5"/><circle cx="44" cy="20" r="1.5"/><circle cx="56" cy="20" r="1.5"/><circle cx="72" cy="24" r="1.5"/><circle cx="80" cy="36" r="1.5"/><circle cx="26" cy="56" r="1.5"/><circle cx="74" cy="56" r="1.5"/>
+                </g>
+                <g fill="#ec4899">
+                    <path transform="translate(26,45)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(32,54)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(43,58)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(57,58)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(68,54)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(74,45)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(38,28)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(62,28)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/>
+                </g>
+                <g fill="#be185d">
+                    <circle cx="26" cy="45" r="1.5"/><circle cx="32" cy="54" r="1.5"/><circle cx="43" cy="58" r="1.5"/><circle cx="57" cy="58" r="1.5"/><circle cx="68" cy="54" r="1.5"/><circle cx="74" cy="45" r="1.5"/><circle cx="38" cy="28" r="1.5"/><circle cx="62" cy="28" r="1.5"/>
+                </g>
+                <g fill="#f97316">
+                    <path transform="translate(35,42)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(43,48)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(57,48)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(65,42)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(50,32)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/>
+                </g>
+                <g fill="#ea580c">
+                    <circle cx="35" cy="42" r="1.5"/><circle cx="43" cy="48" r="1.5"/><circle cx="57" cy="48" r="1.5"/><circle cx="65" cy="42" r="1.5"/><circle cx="50" cy="32" r="1.5"/>
+                </g>
+                <g fill="#facc15">
+                    <path transform="translate(50,42)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(43,36)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/><path transform="translate(57,36)" d="M0,-7C6,-9 9,-4 0,0C9,4 6,9 0,7C-6,9 -9,4 0,0C-9,-4 -6,-9 0,-7Z"/>
+                </g>
+                <g fill="#ca8a04">
+                    <circle cx="50" cy="42" r="1.5"/><circle cx="43" cy="36" r="1.5"/><circle cx="57" cy="36" r="1.5"/>
+                </g>
+            </svg>
+        `;
+
+        // 斑腿樹蛙 SVG
+        const SpotLeggedTreeFrogIcon = `
+            <svg viewBox="0 0 100 100" class="w-12 h-12 inline-block">
+                <circle cx="28" cy="35" r="16" fill="#b45309" stroke="#78350f" stroke-width="2"/>
+                <circle cx="72" cy="35" r="16" fill="#b45309" stroke="#78350f" stroke-width="2"/>
+                <ellipse cx="50" cy="55" rx="42" ry="30" fill="#b45309" stroke="#78350f" stroke-width="2"/>
+                <ellipse cx="50" cy="55" rx="40" ry="28" fill="#b45309" />
+                <circle cx="28" cy="35" r="14" fill="#b45309" />
+                <circle cx="72" cy="35" r="14" fill="#b45309" />
+                <circle cx="28" cy="35" r="8" fill="#facc15" stroke="#78350f" stroke-width="1.5"/>
+                <circle cx="72" cy="35" r="8" fill="#facc15" stroke="#78350f" stroke-width="1.5"/>
+                <ellipse cx="28" cy="35" rx="5" ry="2" fill="#000000" />
+                <ellipse cx="72" cy="35" rx="5" ry="2" fill="#000000" />
+                <circle cx="50" cy="45" r="2.5" fill="#78350f" />
+                <circle cx="35" cy="55" r="3" fill="#78350f" />
+                <circle cx="65" cy="55" r="2" fill="#78350f" />
+                <circle cx="42" cy="65" r="2.5" fill="#78350f" />
+                <circle cx="58" cy="68" r="3" fill="#78350f" />
+                <circle cx="50" cy="75" r="1.5" fill="#78350f" />
+                <ellipse cx="45" cy="50" rx="1.5" ry="1" fill="#78350f" />
+                <ellipse cx="55" cy="50" rx="1.5" ry="1" fill="#78350f" />
+                <path d="M 25,65 Q 50,85 75,65" fill="none" stroke="#78350f" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+        `;
+
+        // 綠鬣蜥 SVG
+        const GreenIguanaIcon = `
+            <svg viewBox="0 0 100 100" class="w-12 h-12 inline-block">
+                <path d="M 40,35 L 42,12 L 50,32 L 55,10 L 62,32 L 70,15 L 72,38 L 82,25 L 78,50" fill="#bef264" stroke="#14532d" stroke-width="2" stroke-linejoin="round"/>
+                <path d="M 20,55 Q 20,95 45,90 Q 60,85 50,65 Z" fill="#4ade80" stroke="#14532d" stroke-width="2" stroke-linejoin="round"/>
+                <path d="M 28,70 Q 35,72 40,68 M 30,80 Q 38,82 45,78" fill="none" stroke="#14532d" stroke-width="1.5" stroke-linecap="round"/>
+                <path d="M 15,55 Q 25,35 45,35 Q 70,35 75,60 L 75,100 L 40,100 Q 20,80 15,55 Z" fill="#22c55e" stroke="#14532d" stroke-width="2" stroke-linejoin="round"/>
+                <path d="M 15,55 Q 30,60 40,55" fill="none" stroke="#14532d" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="22" cy="45" r="1.5" fill="#14532d" />
+                <path d="M 30,42 Q 35,38 40,42 Q 35,46 30,42 Z" fill="#facc15" stroke="#14532d" stroke-width="1.5"/>
+                <circle cx="35" cy="42" r="1.5" fill="#000000" />
+                <path d="M 27,39 Q 35,36 43,40" fill="none" stroke="#14532d" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="55" cy="60" r="8" fill="#bef264" stroke="#14532d" stroke-width="2"/>
+                <circle cx="55" cy="60" r="3" fill="#4ade80" />
+                <path d="M 65,45 Q 70,45 75,48 M 65,55 Q 70,55 75,58 M 65,65 Q 70,65 75,68" fill="none" stroke="#166534" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+        `;
+
+        // 台北樹蛙 SVG
+        const TaipeiTreeFrogIcon = `
+            <svg viewBox="0 0 100 100" class="w-12 h-12 inline-block">
+                <circle cx="28" cy="35" r="16" fill="#22c55e" stroke="#166534" stroke-width="2"/>
+                <circle cx="72" cy="35" r="16" fill="#22c55e" stroke="#166534" stroke-width="2"/>
+                <ellipse cx="50" cy="55" rx="42" ry="30" fill="#22c55e" stroke="#166534" stroke-width="2"/>
+                <ellipse cx="50" cy="55" rx="40" ry="28" fill="#22c55e" />
+                <circle cx="28" cy="35" r="14" fill="#22c55e" />
+                <circle cx="72" cy="35" r="14" fill="#22c55e" />
+                <circle cx="28" cy="35" r="8" fill="#facc15" stroke="#166534" stroke-width="1.5"/>
+                <circle cx="72" cy="35" r="8" fill="#facc15" stroke="#166534" stroke-width="1.5"/>
+                <ellipse cx="28" cy="35" rx="5" ry="2" fill="#000000" />
+                <ellipse cx="72" cy="35" rx="5" ry="2" fill="#000000" />
+                <ellipse cx="45" cy="50" rx="1.5" ry="1" fill="#166534" />
+                <ellipse cx="55" cy="50" rx="1.5" ry="1" fill="#166534" />
+                <path d="M 25,65 Q 50,85 75,65" fill="none" stroke="#166534" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+        `;
+
+        // 帝雉 SVG
+        const MikadoPheasantIcon = `
+            <svg viewBox="0 0 100 100" class="w-12 h-12 inline-block">
+                <path d="M 35,65 L 85,95 L 80,100 Z" fill="#1e1b4b" stroke="#0f172a" stroke-width="1"/>
+                <path d="M 40,75 L 48,80 M 52,82 L 60,87 M 65,88 L 73,93" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+                <ellipse cx="40" cy="55" rx="18" ry="14" fill="#1e1b4b" transform="rotate(-30 40 55)"/>
+                <path d="M 30,50 Q 45,45 55,65 Q 40,70 30,50 Z" fill="#312e81" stroke="#0f172a" stroke-width="1"/>
+                <circle cx="25" cy="30" r="9" fill="#1e1b4b"/>
+                <path d="M 18,35 Q 25,50 35,50 L 35,40 Z" fill="#1e1b4b"/>
+                <path d="M 22,28 Q 28,24 32,30 Q 28,34 22,28 Z" fill="#dc2626"/>
+                <circle cx="27" cy="29" r="1.5" fill="#000000"/>
+                <circle cx="26.5" cy="28.5" r="0.5" fill="#ffffff"/>
+                <polygon points="17,28 8,32 18,34" fill="#9ca3af" stroke="#4b5563" stroke-width="0.5"/>
+                <line x1="35" y1="65" x2="30" y2="85" stroke="#9ca3af" stroke-width="2" stroke-linecap="round"/>
+                <line x1="42" y1="65" x2="40" y2="85" stroke="#9ca3af" stroke-width="2" stroke-linecap="round"/>
+                <line x1="30" y1="85" x2="23" y2="90" stroke="#9ca3af" stroke-width="2"/>
+                <line x1="40" y1="85" x2="33" y2="90" stroke="#9ca3af" stroke-width="2"/>
+            </svg>
+        `;
+
+        // 生物資料庫 (更新名單：嚴格剔除了特有亞種，確保所有特有種分類皆為嚴格定義之特有種)
+        const ALL_ORGANISMS = [
+            // Round 1 - Endemic (嚴格特有種)
+            { id: 'e2', name: '臺灣百合', category: 'endemic', icon: TaiwanLilyIcon, round: 1 },
+            { id: 'e13', name: '臺灣野山羊', category: 'endemic', icon: TaiwanSerowIcon, round: 1 },
+            { id: 'e5', name: '玉山薄雪草', category: 'endemic', icon: EdelweissIcon, round: 1 },
+            { id: 'e14', name: '台北樹蛙', category: 'endemic', icon: TaipeiTreeFrogIcon, round: 1 }, 
+
+            // Round 1 - Invasive
+            { id: 'i1', name: '紅火蟻', category: 'invasive', icon: '🐜', round: 1 },
+            { id: 'i2', name: '福壽螺', category: 'invasive', icon: '🐚', round: 1 },
+            { id: 'i3', name: '小花蔓澤蘭', category: 'invasive', icon: MikaniaIcon, round: 1 },
+            { id: 'i4', name: '琵琶鼠魚', category: 'invasive', icon: '🐡', round: 1 },
+            { id: 'i5', name: '牛蛙', category: 'invasive', icon: '🐸', round: 1 },
+            { id: 'i6', name: '布袋蓮', category: 'invasive', icon: WaterHyacinthIcon, round: 1 },
+            
+            // Round 2 - Endemic (嚴格特有種)
+            { id: 'e7', name: '南湖柳葉菜', category: 'endemic', icon: '🌸', round: 2 },
+            { id: 'e8', name: '台灣獼猴', category: 'endemic', icon: FormosanMacaqueIcon, round: 2 },
+            { id: 'e9', name: '台灣藍鵲', category: 'endemic', icon: TaiwanBlueMagpieIcon, round: 2 },
+            { id: 'e10', name: '橙腹樹蛙', category: 'endemic', icon: OrangeBelliedFrogIcon, round: 2 },
+            { id: 'e15', name: '帝雉', category: 'endemic', icon: MikadoPheasantIcon, round: 2 }, 
+
+            // Round 2 - Invasive
+            { id: 'i7', name: '吳郭魚', category: 'invasive', icon: '🐟', round: 2 },
+            { id: 'i8', name: '馬櫻丹', category: 'invasive', icon: LantanaIcon, round: 2 },
+            { id: 'i9', name: '斑腿樹蛙', category: 'invasive', icon: SpotLeggedTreeFrogIcon, round: 2 },
+            { id: 'i10', name: '埃及聖䴉', category: 'invasive', icon: SacredIbisIcon, round: 2 },
+            { id: 'i11', name: '綠鬣蜥', category: 'invasive', icon: GreenIguanaIcon, round: 2 },
+        ];
+
+        let currentRound = 1;
+        let score = 0;
+        let selectedId = null;
+        let deckItems = [];
+
+        function initRound(round) {
+            currentRound = round;
+            selectedId = null;
+            document.getElementById('round-indicator').innerText = `第 ${round} / 2 回合`;
+            document.getElementById('round-complete').classList.add('hidden');
+            document.getElementById('endemic-list').innerHTML = '';
+            document.getElementById('invasive-list').innerHTML = '';
+            
+            // Filter organisms for this round and shuffle
+            deckItems = ALL_ORGANISMS.filter(o => o.round === round).sort(() => Math.random() - 0.5);
+            renderDeck();
+            updateHints();
+            lucide.createIcons();
+        }
+
+        function renderDeck() {
+            const deckEl = document.getElementById('organisms-deck');
+            deckEl.innerHTML = '';
+            deckEl.classList.remove('hidden');
+
+            deckItems.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'organism-card bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl text-center hover:border-blue-300 hover:shadow-md flex flex-col items-center justify-between';
+                card.draggable = true;
+                card.id = `card-${item.id}`;
+                
+                let iconHtml;
+                if (item.icon.endsWith('.jpg')) {
+                    iconHtml = `<img src="${item.icon}" alt="${item.name}" class="w-16 h-16 object-cover rounded-lg mb-2 shadow-sm">`;
+                } else {
+                    iconHtml = `<div class="flex justify-center mb-2 text-4xl">${item.icon}</div>`;
+                }
+
+                card.innerHTML = `
+                    ${iconHtml}
+                    <div class="font-bold text-slate-800">${item.name}</div>
+                `;
+                
+                // Drag Events
+                card.ondragstart = (e) => {
+                    e.dataTransfer.setData('text/plain', item.id);
+                    card.classList.add('opacity-50');
+                };
+                card.ondragend = () => card.classList.remove('opacity-50');
+                
+                // Click Event (Mobile/Tab)
+                card.onclick = (e) => {
+                    e.stopPropagation();
+                    if (selectedId === item.id) {
+                        selectedId = null;
+                        card.classList.remove('selected');
+                    } else {
+                        if (selectedId) document.getElementById(`card-${selectedId}`)?.classList.remove('selected');
+                        selectedId = item.id;
+                        card.classList.add('selected');
+                    }
+                };
+
+                deckEl.appendChild(card);
+            });
+        }
+
+        function allowDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('drag-over');
+        }
+
+        // Handle drag over removal
+        document.querySelectorAll('.drop-zone').forEach(zone => {
+            zone.ondragleave = (e) => e.currentTarget.classList.remove('drag-over');
+        });
+
+        function handleDrop(e, zoneCategory) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('drag-over');
+            const itemId = e.dataTransfer.getData('text/plain');
+            processMove(itemId, zoneCategory);
+        }
+
+        function handleZoneClick(zoneCategory) {
+            if (selectedId) {
+                processMove(selectedId, zoneCategory);
+                selectedId = null;
+            }
+        }
+
+        function processMove(itemId, zoneCategory) {
+            const item = ALL_ORGANISMS.find(o => o.id === itemId);
+            if (!item) return;
+
+            if (item.category === zoneCategory) {
+                // Correct
+                score += 10;
+                document.getElementById('score').innerText = score;
+                showFeedback(true, `太棒了！${item.name}分類正確。`);
+                
+                // Move to list
+                deckItems = deckItems.filter(i => i.id !== itemId);
+                addToPlacedList(item, zoneCategory);
+                renderDeck();
+                checkRoundEnd();
+            } else {
+                // Wrong
+                showFeedback(false, `再想想看，${item.name}不屬於這類喔。`);
+                if (selectedId) {
+                    document.getElementById(`card-${selectedId}`)?.classList.remove('selected');
+                    selectedId = null;
+                }
+            }
+            updateHints();
+        }
+
+        function addToPlacedList(item, category) {
+            const list = document.getElementById(`${category}-list`);
+            const div = document.createElement('div');
+            div.className = 'bg-white p-2 rounded-lg shadow-sm border border-slate-100 flex items-center gap-2 animate-in fade-in zoom-in duration-300';
+            
+            let iconHtml;
+            if (item.icon.endsWith('.jpg')) {
+                iconHtml = `<img src="${item.icon}" alt="${item.name}" class="w-8 h-8 object-cover rounded-full border border-slate-200">`;
+            } else {
+                iconHtml = `<span class="text-xl">${item.icon}</span>`;
+            }
+
+            div.innerHTML = `
+                ${iconHtml}
+                <span class="text-sm font-medium">${item.name}</span>
+                <i data-lucide="check-circle-2" class="w-4 h-4 text-green-500"></i>
+            `;
+            list.appendChild(div);
+            lucide.createIcons();
+        }
+
+        function updateHints() {
+            document.querySelectorAll('.drop-zone').forEach(zone => {
+                const list = zone.querySelector('div[id$="-list"]');
+                const hint = zone.querySelector('.empty-hint');
+                hint.style.display = list.children.length > 0 ? 'none' : 'flex';
+            });
+        }
+
+        function showFeedback(isSuccess, text) {
+            const fb = document.getElementById('feedback-msg');
+            const fbText = document.getElementById('feedback-text');
+            const fbIcon = document.getElementById('feedback-icon');
+
+            fb.className = `flex items-center gap-3 px-8 py-3 rounded-full shadow-lg border feedback-pop ${isSuccess ? 'bg-green-600 border-green-700' : 'bg-red-600 border-red-700'}`;
+            fbText.innerText = text;
+            fbIcon.innerHTML = isSuccess ? '<i data-lucide="check-circle-2" class="w-6 h-6 text-white"></i>' : '<i data-lucide="x-circle" class="w-6 h-6 text-white"></i>';
+            
+            fb.classList.remove('hidden');
+            lucide.createIcons();
+            
+            setTimeout(() => fb.classList.add('hidden'), 2000);
+        }
+
+        function checkRoundEnd() {
+            if (deckItems.length === 0) {
+                const deckContainer = document.getElementById('organisms-deck');
+                deckContainer.classList.add('hidden');
+                
+                const complete = document.getElementById('round-complete');
+                const title = document.getElementById('complete-title');
+                const desc = document.getElementById('complete-desc');
+                const btn = document.getElementById('next-btn');
+                
+                complete.classList.remove('hidden');
+                
+                if (currentRound === 1) {
+                    title.innerText = "第一回合完成！";
+                    desc.innerText = "你已經成功分類了第一批生物。準備好迎接下一批挑戰嗎？";
+                    btn.innerText = "進入第二回合";
+                    btn.onclick = startSecondRound;
+                } else {
+                    title.innerText = "全部挑戰成功！";
+                    desc.innerText = `恭喜你！你的最終得分是 ${score} 分。你對台灣生物的分類非常熟悉喔！`;
+                    btn.innerText = "重新開始遊戲";
+                    btn.onclick = resetGame;
+                }
+            }
+        }
+
+        function startSecondRound() {
+            initRound(2);
+        }
+
+        function resetGame() {
+            score = 0;
+            document.getElementById('score').innerText = 0;
+            initRound(1);
+        }
+
+        // Global click to deselect
+        document.body.onclick = () => {
+            if (selectedId) {
+                document.getElementById(`card-${selectedId}`)?.classList.remove('selected');
+                selectedId = null;
+            }
+        };
+
+        // Start initial round
+        window.onload = () => initRound(1);
+
+    </script>
+</body>
+</html>
